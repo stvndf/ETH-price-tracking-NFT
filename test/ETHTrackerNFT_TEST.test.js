@@ -300,4 +300,8 @@ contract("ETHTrackerNFT_TEST", () => {
       assert.equal(tokenURI, baseURI + 6); // 20k
     });
   });
+
+  it("Keeper network functionality", async () => {
+    
+  });
 });
