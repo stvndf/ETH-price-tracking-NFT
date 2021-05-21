@@ -1,11 +1,16 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 
 pragma solidity 0.8.4;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
+
+import "hardhat/console.sol";
 
 contract ETHTrackerNFT_TEST is ERC721 {
+
+    using Strings for uint256;
 
     enum Status {
         Up1,           // 0
@@ -28,29 +33,33 @@ contract ETHTrackerNFT_TEST is ERC721 {
     int16 public trend; // consecutive days price appreciated/depreciated (unchanged if price remains same)
 
 
-    constructor(string memory baseURI) ERC721("ETHTrackerNFT", "ETN") {
-        priceFeed = AggregatorV3Interface(0x9326BFA02ADD2366b30bacB125260Af641031331); // Rinkeby
-
+    constructor(string memory baseURI, address priceFeedOracle) ERC721("ETHTrackerNFT", "ETN") {
         _base = baseURI;
+        priceFeed = AggregatorV3Interface(priceFeedOracle);
         _mint(msg.sender, 0);
-        (int price, uint timestamp) = _getLatestPrice();
+        (int price, uint timestamp) = _getLatestPrice(2000_00000000, 1609459200); //NOTE params only for testing
         latestPrice = price;
         latestDateChecked = _getDateTimestamp(timestamp);
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(tokenId == 0, "Only tokenId 0 exists");
-        return string(abi.encodePacked(_base, _status));
+        return string(abi.encodePacked(_base, uint(_status).toString()));
     }
 
-    function _getLatestPrice() private view returns (int, uint) {
-        (
-            uint80 roundID,
-            int price,
-            uint startedAt,
-            uint timestamp,
-            uint80 answeredInRound
-        ) = priceFeed.latestRoundData();
+    // function _getLatestPrice() private view returns (int, uint) {
+    //     (
+    //         uint80 roundID,
+    //         int price,
+    //         uint startedAt,
+    //         uint timestamp,
+    //         uint80 answeredInRound
+    //     ) = priceFeed.latestRoundData();
+    //     return (price, timestamp);
+    // }
+
+    function _getLatestPrice(int price, uint timestamp) private pure returns (int, uint) {
+        //NOTE DO NOT USE IN REAL CONTRACT. For testing purposes only (to pass through any price and timestamp).
         return (price, timestamp);
     }
 
@@ -62,14 +71,14 @@ contract ETHTrackerNFT_TEST is ERC721 {
         return currentDateTimestamp;
     }
 
+    function TEST_UpdatePrice(int price, uint timestamp) public {
+        //NOTE DO NOT USE IN REAL CONTRACT. For testing purposes only (to pass through any price and timestamp).
 
-    function updatePrice() public {
         (
-            int price,
-            uint timestamp // the time price feed last updated (not the time oracle called)
-        ) = _getLatestPrice();
+            price,
+            timestamp // the time price feed last updated (not the time oracle called)
+        ) = _getLatestPrice(price, timestamp);
         uint date = _getDateTimestamp(timestamp);
-
         require(date != latestDateChecked, "Latest available price from price feed has already been set for the day");
 
         int prevPrice = latestPrice;
@@ -84,7 +93,7 @@ contract ETHTrackerNFT_TEST is ERC721 {
                 trend = 1;
             }
 
-            if (price > 20_000) {
+            if (price >= 20000_00000000) {
                 _status = Status.twentyThousand;
             } else if (trend >= 5) {
                 _status = Status.Up5;
@@ -102,24 +111,39 @@ contract ETHTrackerNFT_TEST is ERC721 {
                 trend = -1;
             }
 
-            if (price > 20_000) {
+            if (price >= 20000_00000000) { // 8 decimal places
                 _status = Status.twentyThousand;
             } else if (trend <= -5) {
                 _status = Status.Down5;
-            } else if (trend <= 2) {
+            } else if (trend <= -2) {
                 _status = Status.Down2;
-            } else if (trend <= 1) {
+            } else if (trend == -1) {
                 _status = Status.Down1;
             }
+        } else if (price - prevPrice == 0) { // price static
+            if (prevDate != date - secondsInDay) { // previous check was not previous day
+                trend > 0 ? trend = 1 : trend = -1;
 
-        } else { // price remained same
-            // trend and _status remain unchanged
-            return;
+                if (price >= 20000_00000000) {
+                    _status = Status.twentyThousand;
+                } else if (trend >= 5) {
+                    _status = Status.Up5;
+                } else if (trend >= 2) {
+                    _status = Status.Up2;
+                } else if (trend == 1) {
+                    _status = Status.Up1;
+                } else if (trend <= -5) {
+                _status = Status.Down5;
+                } else if (trend <= -2) {
+                    _status = Status.Down2;
+                } else if (trend == -1) {
+                    _status = Status.Down1;
+                }
+            } // else trend and _status remain unchanged
         }
 
         latestPrice = price;
         latestDateChecked = date;
     }
-
 
 }
