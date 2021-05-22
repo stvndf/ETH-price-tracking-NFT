@@ -1,4 +1,4 @@
-const { assert } = require("chai");
+const { assert, expect } = require("chai");
 const Contract = artifacts.require("ETHTrackerNFT_TEST");
 
 contract("ETHTrackerNFT_TEST", () => {
@@ -301,7 +301,33 @@ contract("ETHTrackerNFT_TEST", () => {
     });
   });
 
-  it("Keeper network functionality", async () => {
-    
+  describe("Keeper network functionality", () => {
+    // caveat: not setting it through the oracle in these tests
+
+    it("checkUpkeep", async () => {
+      let checkUpkeep;
+
+      checkUpkeep = await contract.checkUpkeep("0x0", 2100_00000000, timestamp(1));
+      assert.equal(checkUpkeep.upkeepNeeded, false)
+      checkUpkeep = await contract.checkUpkeep("0x0", 2100_00000000, timestamp(2));
+      assert.equal(checkUpkeep.upkeepNeeded, true)
+    })
+
+    it("performUpkeep", async () => {
+      let trend;
+      let tokenURI;
+
+      await contract.performUpkeep("0x0", 2100_00000000, timestamp(2));
+      trend = await contract.trend();
+      tokenURI = await contract.tokenURI(0);
+      assert.equal(trend.toNumber(), 1);
+      assert.equal(tokenURI, baseURI + 0); // Up1
+
+      await contract.performUpkeep("0x0", 2000_00000000, timestamp(3));
+      trend = await contract.trend();
+      tokenURI = await contract.tokenURI(0);
+      assert.equal(trend.toNumber(), -1);
+      assert.equal(tokenURI, baseURI + 3); // Down1
+    })
   });
 });

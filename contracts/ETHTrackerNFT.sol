@@ -6,18 +6,25 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract ETHTrackerNFT is ERC721 {
+interface KeeperCompatibleInterface {
+    function checkUpkeep(bytes calldata checkData)
+        external
+        returns (bool upkeepNeeded, bytes memory performData);
 
+    function performUpkeep(bytes calldata performData) external;
+}
+
+contract ETHTrackerNFT is ERC721 {
     using Strings for uint256;
 
     enum Status {
-        Up1, // 0
-        Up2, // 1
-        Up5, // 2
-        Down1, // 3
-        Down2, // 4
-        Down5, // 5
-        twentyThousand // 6
+        Up1,            // 0
+        Up2,            // 1
+        Up5,            // 2
+        Down1,          // 3
+        Down2,          // 4
+        Down5,          // 5
+        twentyThousand  // 6
     }
 
     AggregatorV3Interface private priceFeed;
@@ -41,9 +48,14 @@ contract ETHTrackerNFT is ERC721 {
         latestDateChecked = _getDateTimestamp(timestamp);
     }
 
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+    function tokenURI(uint256 tokenId)
+        public
+        view
+        override
+        returns (string memory)
+    {
         require(tokenId == 0, "Only tokenId 0 exists");
-        return string(abi.encodePacked(_base, uint(_status).toString()));
+        return string(abi.encodePacked(_base, uint256(_status).toString()));
     }
 
     function _getLatestPrice() private view returns (int256, uint256) {
@@ -86,7 +98,6 @@ contract ETHTrackerNFT is ERC721 {
         uint32 secondsInDay = 86_400;
 
         if (price - prevPrice > 0) { // price appreciated
-
             if (prevDate == date - secondsInDay) {
                 // previous check was previous day
                 trend > 0 ? trend++ : trend = 1;
@@ -103,9 +114,7 @@ contract ETHTrackerNFT is ERC721 {
             } else if (trend == 1) {
                 _status = Status.Up1;
             }
-
         } else if (price - prevPrice < 0) { // price depreciated
-
             if (prevDate == date - secondsInDay) {
                 // previous check was previous day
                 trend < 0 ? trend-- : trend = -1;
@@ -123,9 +132,7 @@ contract ETHTrackerNFT is ERC721 {
             } else if (trend == -1) {
                 _status = Status.Down1;
             }
-
         } else if (price - prevPrice == 0) { // price static
-
             if (prevDate != date - secondsInDay) {
                 // previous check was not previous day
                 trend > 0 ? trend = 1 : trend = -1;
@@ -146,10 +153,28 @@ contract ETHTrackerNFT is ERC721 {
                     _status = Status.Down1;
                 }
             } // else trend and _status remain unchanged
-
         }
 
         latestPrice = price;
         latestDateChecked = date;
+    }
+
+    function checkUpkeep(bytes calldata checkData)
+        external
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        uint32 secondsInDay = 86_400;
+
+        (, uint256 timestamp) = _getLatestPrice();
+
+        timestamp >= latestDateChecked + secondsInDay
+            ? upkeepNeeded = true
+            : upkeepNeeded = false;
+        performData = checkData;
+    }
+
+    function performUpkeep(bytes calldata performData) external {
+        updatePrice();
     }
 }
